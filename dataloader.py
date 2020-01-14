@@ -30,7 +30,7 @@ class SNLI_DataLoader(object):
                                                                repeat=False)
 
         self.test_iter = Iterator(test, batch_size=64, device=device, sort=False, sort_within_batch=False, repeat=False)
-        self.TEXT.build_vocab(trn)
+        self.TEXT.build_vocab(trn, vld, test)
         self.LABEL.build_vocab(trn)
 
     def get_text_2_id_vocabulary(self):
