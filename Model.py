@@ -34,7 +34,7 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, embeddings,emb_dim=512, out_dim=1024):
+    def __init__(self, embeddings, vocabulary_map, emb_dim=512, out_dim=1024, ):
         super().__init__()
         self.dme = MetaEmbedding(embeddings)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim)

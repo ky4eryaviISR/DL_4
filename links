@@ -1,2 +1,6 @@
 fasttext = https://fasttext.cc/docs/en/english-vectors.html
 glove = http://nlp.stanford.edu/data/glove.840B.300d.zip
+
+
+pip install spacy
+python -m spacy download en
