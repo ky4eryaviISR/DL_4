@@ -37,11 +37,16 @@ def train(model, tr_data, val_data, opt, epoch=10):
         evaluate(model, val_data, criterion, 'Validation')
 
 
+emb_file = ['data/fasttext/wiki-news-300d-1M.vec',
+            'data/glove/glove.6B.50d.txt',
+            'GoogleNews-vectors-negative300.bin']
+
+
 def main():
-    main()
-    model = MainModel(None, None)
-    opt = Adam(model.parameters(), lr=1e-2)
     dt = SNLI_DataLoader()
+    model = MainModel(256, dt.get_text_2_id_vocabulary())
+    opt = Adam(model.parameters(), lr=1e-2)
+
     train(model, dt.train_iter, dt.val_iter, opt)
     print('x')
 

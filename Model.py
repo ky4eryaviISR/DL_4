@@ -11,15 +11,8 @@ import numpy as np
 
 
 class MetaEmbedding(nn.Module):
-    def __init__(self, name, embedding_files, global_dict):
+    def __init__(self, embedding_files, global_dict):
         super().__init__()
-
-
-
-        choice = {'glove.6B.50d': None}
-        word_dict = choice[name]
-
-
         self.embedding = MetaEmbedding.create_embedding(global_dict, embedding_files)
 
 
@@ -59,14 +52,13 @@ class MainModel(nn.Module):
 
     def __init__(self, embeddings, vocabulary_map, emb_dim=512, out_dim=1024, ):
         super().__init__()
-        self.dme = MetaEmbedding(embeddings)
+        self.dme = MetaEmbedding(embeddings, vocabulary_map)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim)
 
     def forward(self, sentences, sen_len):
         out = sentences
         out = self.dme(out)
         self.sen_encoder(out)
-
 
 
 if __name__ == '__main__':
