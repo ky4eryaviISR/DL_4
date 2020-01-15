@@ -2,13 +2,36 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
+from enum import Enum
+from collections import OrderedDict
+from pathlib import Path
+from tqdm import tqdm
+import numpy as np
+
+
 
 class MetaEmbedding(nn.Module):
-    def __init__(self, embedding_files):
+    def __init__(self, name, embedding_files, global_dict):
         super().__init__()
-        self.meta_emb = []
-        for emb in embedding_files:
-            self.meta_emb.append(nn.Embedding.from_pretrained(emb))
+
+
+
+        choice = {'glove.6B.50d': None}
+        word_dict = choice[name]
+
+
+        self.embedding = MetaEmbedding.create_embedding(global_dict, embedding_files)
+
+
+    @staticmethod
+    def create_embedding(word_dict, embedding_files):
+        embed = torch.zeros(len(word_dict.items()), 50)
+        for word, loc in word_dict.items():
+            if word in embedding_files.keys():
+                vector = torch.from_numpy(embedding_files['word'])
+                embed[loc-1, :] = vector[:]
+        return embed
+
 
     def forward(self, word):
         out = []
@@ -44,3 +67,27 @@ class MainModel(nn.Module):
         out = self.dme(out)
         self.sen_encoder(out)
 
+
+
+if __name__ == '__main__':
+    sentence = 'the quick brown fox jumps over the lazy dog'
+    words = sentence.split()
+
+    GLOVE_FILENAME = 'glove/glove.6B.50d.txt'
+    name = Path(GLOVE_FILENAME).stem
+
+    glove_index = {}
+    n_lines = sum(1 for line in open(GLOVE_FILENAME))
+    with open(GLOVE_FILENAME) as fp:
+        for line in tqdm(fp, total=n_lines):
+            split = line.split()
+            word = split[0]
+            vector = np.array(split[1:]).astype(float)
+            glove_index[word] = vector
+
+    words = {'the': 1, 'country': 2, 'box': 3}
+
+    #glove_embeddings = np.array([glove_index[word] for word in words])
+
+
+    embed = MetaEmbedding(name, glove_index, words)
