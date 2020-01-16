@@ -70,9 +70,9 @@ class SentenceEncoder(nn.Module):
     def forward(self, words, sen_len):
         out = words.view(words.shape[0], words.shape[1], -1)
         out = pack_padded_sequence(out, sen_len, batch_first=True, enforce_sorted=False)
-        out, _ = self.bilstm(out, self.init_hidden(words.shape[1]))
+        out, _ = self.bilstm(out, self.init_hidden(words.shape[0]))
         out, _ = pad_packed_sequence(out, batch_first=True)
-        return out.max(1)[0]
+        return out.max(0)[0]
 
 
 class MainModel(nn.Module):
