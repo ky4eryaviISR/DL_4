@@ -4,7 +4,9 @@ from torch.functional import F
 from tqdm import tqdm
 from Model import MainModel
 from dataloader import SNLI_DataLoader
+from torch import cuda
 
+device = 'cuda' if cuda.is_available() else 'cpu'
 
 def evaluate(model, data, criterion, set_name):
     model.eval()
@@ -26,10 +28,10 @@ def train(model, tr_data, val_data, opt, epoch=10):
     criterion = CrossEntropyLoss()
     for i in range(epoch):
         model.train()
-        for x, y in tqdm(tr_data):
+        for data in tqdm(tr_data):
             opt.zero_grad()
-            preds = model(x)
-            loss = criterion(preds, y)
+            preds = model(data.premise, data.hypothesis)
+            loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
 
@@ -44,7 +46,7 @@ emb_file = ['data/fasttext/wiki-news-300d-1M.vec',
 
 def main():
     dt = SNLI_DataLoader()
-    model = MainModel(256, dt.get_text_2_id_vocabulary())
+    model = MainModel(emb_file, dt.get_text_2_id_vocabulary()).to(device)
     opt = Adam(model.parameters(), lr=1e-2)
 
     train(model, dt.train_iter, dt.val_iter, opt)

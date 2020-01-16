@@ -11,7 +11,7 @@ print("{} available".format(device))
 class SNLI_DataLoader(object):
 
     def __init__(self):
-        self.TEXT = Field(lower=True, tokenize=lambda x: x.split())
+        self.TEXT = Field(lower=True, include_lengths=True, tokenize=lambda x: x.split())
         self.LABEL = Field(sequential=True, use_vocab=True)
         self.test_iter = self.train_iter = self.val_iter = None
         self.load_datasets()
@@ -25,8 +25,8 @@ class SNLI_DataLoader(object):
         self.train_iter, self.val_iter = BucketIterator.splits((trn, vld),
                                                                batch_sizes=(64, 64),
                                                                device=device,
-                                                               sort_key=lambda x: len(x.premise),
-                                                               sort_within_batch=False,
+                                                               sort_key=lambda x: (len(x.premise), len(x.hypothesis)),
+                                                               sort_within_batch=True,
                                                                repeat=False)
 
         self.test_iter = Iterator(test, batch_size=64, device=device, sort=False, sort_within_batch=False, repeat=False)
