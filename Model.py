@@ -10,24 +10,45 @@ from torch import cuda
 
 # device = 'cuda' if cuda.is_available() else 'cpu'
 device = 'cpu'
+
+
+def is_accessible(path):
+    """
+    Check if the file or directory at `path` can
+    be accessed by the program using `mode` open flags.
+    """
+    try:
+        my_dict_back = np.load(path, allow_pickle=True)
+    except IOError:
+        return None
+    return my_dict_back.item()
+
+
 def parse_embedding(path):
-    glove_index = {}
-    n_lines = sum(1 for _ in open(path, encoding='utf8'))
-    with open(path, encoding='utf8') as fp:
-        for line in tqdm(fp, total=n_lines):
-            split = line.split()
-            word = split[0]
-            vector = np.array(split[1:]).astype(float)
-            glove_index[word] = vector
+    glove_index = is_accessible(path)
+    if not glove_index:
+        glove_index = {}
+        n_lines = sum(1 for _ in open(path, encoding='utf8'))
+        with open(path, encoding='utf8') as fp:
+            for line in tqdm(fp, total=n_lines):
+                split = line.split()
+                word = split[0]
+                vector = np.array(split[1:]).astype(float)
+                glove_index[word] = vector
     return glove_index
 
 
+
 class MetaEmbedding(nn.Module):
-    def __init__(self, embedding_files, global_dict):
+    def __init__(self, global_dict):
         super().__init__()
         dim_fasttext = 300
-        fasttext = parse_embedding('data/fasttext/wiki-news-300d-1M.vec')
-        fasttext = self.create_embedding(global_dict, fasttext,dim_fasttext)
+
+
+        path = 'data/fasttext/wiki-news-300d-1M.vec'
+        path = 'data/fasttext/wiki-news-300d-1M_minimize.npy'
+        fasttext = parse_embedding(path)
+        fasttext = self.create_embedding(global_dict, fasttext,dim_fasttext, path)
 
         self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
         dim_glove = 50
@@ -42,12 +63,22 @@ class MetaEmbedding(nn.Module):
         self.fasttext_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
         self.glove_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
 
-    def create_embedding(self, word_dict, embedding_files,dim):
+    def create_embedding(self, word_dict, embedding_files,dim, path):
         embed = torch.zeros(len(word_dict.items()), dim)
-        for word, loc in word_dict.items():
+        glove_index = {}
+
+        for word, loc in tqdm(word_dict.items()):
             if word in embedding_files.keys():
                 vector = torch.from_numpy(embedding_files['word'])
                 embed[loc-1, :] = vector[:]
+                glove_index[word] = embedding_files['word']
+
+        p = Path(path)
+        new_name = ''.join([p.stem, '_minimize.npy'])
+        outfile = Path(p.parent, f"{new_name}").as_posix()
+        np.save(outfile, glove_index)
+
+
         return embed
 
     def forward(self, word):
@@ -105,25 +136,25 @@ class MainModel(nn.Module):
 
 
 
-# if __name__ == '__main__':
-#     sentence = 'the quick brown fox jumps over the lazy dog'
-#     words = sentence.split()
-#
-#     GLOVE_FILENAME = 'glove/glove.6B.50d.txt'
-#     name = Path(GLOVE_FILENAME).stem
-#
-#     glove_index = {}
-#     n_lines = sum(1 for line in open(GLOVE_FILENAME))
-#     with open(GLOVE_FILENAME) as fp:
-#         for line in tqdm(fp, total=n_lines):
-#             split = line.split()
-#             word = split[0]
-#             vector = np.array(split[1:]).astype(float)
-#             glove_index[word] = vector
-#
-#     words = {'the': 1, 'country': 2, 'box': 3}
-#
-#     #glove_embeddings = np.array([glove_index[word] for word in words])
+if __name__ == '__main__':
+    # sentence = 'the quick brown fox jumps over the lazy dog'
+    # words = sentence.split()
+    #
+    GLOVE_FILENAME = 'glove/glove.6B.50d.txt'
+    # name = Path(GLOVE_FILENAME).stem
+    #
+    # glove_index = {}
+    # n_lines = sum(1 for line in open(GLOVE_FILENAME))
+    # with open(GLOVE_FILENAME) as fp:
+    #     for line in tqdm(fp, total=n_lines):
+    #         split = line.split()
+    #         word = split[0]
+    #         vector = np.array(split[1:]).astype(float)
+    #         glove_index[word] = vector
+    #
+    words = {'the': 1, 'country': 2, 'box': 3}
+
+    #glove_embeddings = np.array([glove_index[word] for word in words])
 
 
-    # embed = MetaEmbedding(name, glove_index, words)
+    embed = MetaEmbedding(words)
