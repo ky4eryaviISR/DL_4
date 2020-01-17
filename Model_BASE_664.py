@@ -8,54 +8,33 @@ from tqdm import tqdm
 import numpy as np
 from torch import cuda
 
-device = 'cuda' if cuda.is_available() else 'cpu'
-
-
-def is_accessible(path):
-    """
-    Check if the file or directory at `path` can
-    be accessed by the program using `mode` open flags.
-    """
-    try:
-        p = Path(path)
-        new_name = ''.join([p.stem, '_minimize.npy'])
-        input_f = Path(p.parent, f"{new_name}").as_posix()
-        my_dict_back = np.load(input_f, allow_pickle=True)
-    except IOError:
-        return None
-    return my_dict_back.item()
-
-
+# device = 'cuda' if cuda.is_available() else 'cpu'
+device = 'cpu'
 def parse_embedding(path):
-    glove_index = is_accessible(path)
-    if not glove_index:
-        glove_index = {}
-        n_lines = sum(1 for _ in open(path, encoding='utf8'))
-        with open(path, encoding='utf8') as fp:
-            for line in tqdm(fp, total=n_lines):
-                split = line.split()
-                word = split[0]
-                vector = np.array(split[1:]).astype(float)
-                glove_index[word] = vector
+    glove_index = {}
+    n_lines = sum(1 for _ in open(path, encoding='utf8'))
+    with open(path, encoding='utf8') as fp:
+        for line in tqdm(fp, total=n_lines):
+            split = line.split()
+            word = split[0]
+            vector = np.array(split[1:]).astype(float)
+            glove_index[word] = vector
     return glove_index
 
 
 class MetaEmbedding(nn.Module):
-    def __init__(self, global_dict):
+    def __init__(self, embedding_files, global_dict):
         super().__init__()
         dim_fasttext = 300
+        fasttext = parse_embedding('data/fasttext/wiki-news-300d-1M.vec')
+        fasttext = self.create_embedding(global_dict, fasttext,dim_fasttext)
 
-        path = 'data/fasttext/wiki-news-300d-1M.vec'
-        fasttext = parse_embedding(path)
-        fasttext = self.create_embedding(global_dict, fasttext, dim_fasttext, path)
-
-        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=False)
+        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
         dim_glove = 50
-        path = 'data/glove/glove.6B.50d.txt'
-        glove = parse_embedding(path)
-        glove = self.create_embedding(global_dict, glove, dim_glove, path)
+        glove = parse_embedding('data/glove/glove.6B.50d.txt')
+        glove = self.create_embedding(global_dict, glove,dim_glove)
         dim_glove = glove.shape[1]
-        self.glove = nn.Embedding.from_pretrained(glove, freeze=False)
+        self.glove = nn.Embedding.from_pretrained(glove, freeze=True)
 
         self.proj_fasttext = nn.Linear(dim_fasttext, 256)
         self.proj_glove = nn.Linear(dim_glove, 256)
@@ -63,29 +42,19 @@ class MetaEmbedding(nn.Module):
         self.fasttext_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
         self.glove_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
 
-    def create_embedding(self, word_dict, embedding_files, dim, path):
+    def create_embedding(self, word_dict, embedding_files,dim):
         embed = torch.zeros(len(word_dict.items()), dim)
-        glove_index = {}
-
-        for word, loc in tqdm(word_dict.items()):
+        for word, loc in word_dict.items():
             if word in embedding_files.keys():
                 vector = torch.from_numpy(embedding_files['word'])
                 embed[loc-1, :] = vector[:]
-                glove_index[word] = embedding_files['word']
-
-        p = Path(path)
-        new_name = ''.join([p.stem, '_minimize.npy'])
-        outfile = Path(p.parent, f"{new_name}").as_posix()
-        np.save(outfile, glove_index)
-
-
         return embed
 
     def forward(self, word):
         glove_out = self.glove_scalar*self.proj_glove(self.glove(word))
         fast_out = self.fasttext_scalar*self.proj_fasttext(self.fasttext(word))
         out = glove_out + fast_out
-        return torch.sigmoid(out)
+        return F.sigmoid(out)
 
 
 class SentenceEncoder(nn.Module):
@@ -107,9 +76,9 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=256, out_dim=512, ):
+    def __init__(self, embeddings, vocabulary_map, emb_dim=256, out_dim=512, ):
         super().__init__()
-        self.dme = MetaEmbedding(vocabulary_map).to(device)
+        self.dme = MetaEmbedding(embeddings, vocabulary_map).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         self.classifier = nn.Sequential(
             nn.Linear(out_dim * 4 * 2, 1024),
@@ -136,25 +105,25 @@ class MainModel(nn.Module):
 
 
 
-if __name__ == '__main__':
-    # sentence = 'the quick brown fox jumps over the lazy dog'
-    # words = sentence.split()
-    #
-    GLOVE_FILENAME = 'glove/glove.6B.50d.txt'
-    # name = Path(GLOVE_FILENAME).stem
-    #
-    # glove_index = {}
-    # n_lines = sum(1 for line in open(GLOVE_FILENAME))
-    # with open(GLOVE_FILENAME) as fp:
-    #     for line in tqdm(fp, total=n_lines):
-    #         split = line.split()
-    #         word = split[0]
-    #         vector = np.array(split[1:]).astype(float)
-    #         glove_index[word] = vector
-    #
-    words = {'the': 1, 'country': 2, 'box': 3}
+# if __name__ == '__main__':
+#     sentence = 'the quick brown fox jumps over the lazy dog'
+#     words = sentence.split()
+#
+#     GLOVE_FILENAME = 'glove/glove.6B.50d.txt'
+#     name = Path(GLOVE_FILENAME).stem
+#
+#     glove_index = {}
+#     n_lines = sum(1 for line in open(GLOVE_FILENAME))
+#     with open(GLOVE_FILENAME) as fp:
+#         for line in tqdm(fp, total=n_lines):
+#             split = line.split()
+#             word = split[0]
+#             vector = np.array(split[1:]).astype(float)
+#             glove_index[word] = vector
+#
+#     words = {'the': 1, 'country': 2, 'box': 3}
+#
+#     #glove_embeddings = np.array([glove_index[word] for word in words])
 
-    #glove_embeddings = np.array([glove_index[word] for word in words])
 
-
-    embed = MetaEmbedding(words)
+    # embed = MetaEmbedding(name, glove_index, words)
