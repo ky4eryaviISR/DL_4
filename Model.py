@@ -8,8 +8,8 @@ from tqdm import tqdm
 import numpy as np
 from torch import cuda
 
-device = 'cuda' if cuda.is_available() else 'cpu'
-
+# device = 'cuda' if cuda.is_available() else 'cpu'
+device = 'cpu'
 def parse_embedding(path):
     glove_index = {}
     n_lines = sum(1 for _ in open(path, encoding='utf8'))
@@ -42,7 +42,6 @@ class MetaEmbedding(nn.Module):
         self.fasttext_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
         self.glove_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
 
-
     def create_embedding(self, word_dict, embedding_files,dim):
         embed = torch.zeros(len(word_dict.items()), dim)
         for word, loc in word_dict.items():
@@ -68,11 +67,11 @@ class SentenceEncoder(nn.Module):
                 torch.randn(2, batch_size, 512).to(device))
 
     def forward(self, words, sen_len):
-        out = words.view(words.shape[0], words.shape[1], -1)
+        out = words
         out = pack_padded_sequence(out, sen_len, batch_first=True, enforce_sorted=False)
         out, _ = self.bilstm(out, self.init_hidden(words.shape[0]))
         out, _ = pad_packed_sequence(out, batch_first=True)
-        return out.max(0)[0]
+        return out.max(1)[0]
 
 
 class MainModel(nn.Module):
@@ -94,8 +93,8 @@ class MainModel(nn.Module):
     def forward(self, prec, hyp):
         sen_1, len_1 = prec
         sen_2, len_2 = hyp
-        sen_1 = sen_1.view(prec[0].shape[1], prec[0].shape[0], -1)
-        sen_2 = sen_2.view(hyp[0].shape[1], hyp[0].shape[0], -1)
+        sen_1 = sen_1.view(prec[0].shape[1], prec[0].shape[0])
+        sen_2 = sen_2.view(hyp[0].shape[1], hyp[0].shape[0])
         sen_1 = self.dme(sen_1)
         sen_2 = self.dme(sen_2)
 
