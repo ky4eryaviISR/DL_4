@@ -8,7 +8,8 @@ from tqdm import tqdm
 import numpy as np
 from torch import cuda
 
-device = 'cuda' if cuda.is_available() else 'cpu'
+# device = 'cuda' if cuda.is_available() else 'cpu'
+device = 'cpu'
 
 
 def is_accessible(path):
@@ -17,10 +18,7 @@ def is_accessible(path):
     be accessed by the program using `mode` open flags.
     """
     try:
-        p = Path(path)
-        new_name = ''.join([p.stem, '_minimize.npy'])
-        input_f = Path(p.parent, f"{new_name}").as_posix()
-        my_dict_back = np.load(input_f, allow_pickle=True)
+        my_dict_back = np.load(path, allow_pickle=True)
     except IOError:
         return None
     return my_dict_back.item()
@@ -40,22 +38,24 @@ def parse_embedding(path):
     return glove_index
 
 
+
 class MetaEmbedding(nn.Module):
     def __init__(self, global_dict):
         super().__init__()
         dim_fasttext = 300
 
-        path = 'data/fasttext/wiki-news-300d-1M.vec'
-        fasttext = parse_embedding(path)
-        fasttext = self.create_embedding(global_dict, fasttext, dim_fasttext, path)
 
-        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=False)
+        path = 'data/fasttext/wiki-news-300d-1M.vec'
+        path = 'data/fasttext/wiki-news-300d-1M_minimize.npy'
+        fasttext = parse_embedding(path)
+        fasttext = self.create_embedding(global_dict, fasttext,dim_fasttext, path)
+
+        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
         dim_glove = 50
-        path = 'data/glove/glove.6B.50d.txt'
-        glove = parse_embedding(path)
-        glove = self.create_embedding(global_dict, glove, dim_glove, path)
+        glove = parse_embedding('data/glove/glove.6B.50d.txt')
+        glove = self.create_embedding(global_dict, glove,dim_glove)
         dim_glove = glove.shape[1]
-        self.glove = nn.Embedding.from_pretrained(glove, freeze=False)
+        self.glove = nn.Embedding.from_pretrained(glove, freeze=True)
 
         self.proj_fasttext = nn.Linear(dim_fasttext, 256)
         self.proj_glove = nn.Linear(dim_glove, 256)
@@ -63,7 +63,7 @@ class MetaEmbedding(nn.Module):
         self.fasttext_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
         self.glove_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
 
-    def create_embedding(self, word_dict, embedding_files, dim, path):
+    def create_embedding(self, word_dict, embedding_files,dim, path):
         embed = torch.zeros(len(word_dict.items()), dim)
         glove_index = {}
 
@@ -85,7 +85,7 @@ class MetaEmbedding(nn.Module):
         glove_out = self.glove_scalar*self.proj_glove(self.glove(word))
         fast_out = self.fasttext_scalar*self.proj_fasttext(self.fasttext(word))
         out = glove_out + fast_out
-        return torch.sigmoid(out)
+        return F.sigmoid(out)
 
 
 class SentenceEncoder(nn.Module):
@@ -107,9 +107,9 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=256, out_dim=512, ):
+    def __init__(self, embeddings, vocabulary_map, emb_dim=256, out_dim=512, ):
         super().__init__()
-        self.dme = MetaEmbedding(vocabulary_map).to(device)
+        self.dme = MetaEmbedding(embeddings, vocabulary_map).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         self.classifier = nn.Sequential(
             nn.Linear(out_dim * 4 * 2, 1024),

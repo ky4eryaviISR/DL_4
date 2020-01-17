@@ -44,14 +44,9 @@ def adjust_lr(optimizer, epoch):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-emb_file = ['data/fasttext/wiki-news-300d-1M.vec',
-            'data/glove/glove.6B.50d.txt',
-            'GoogleNews-vectors-negative300.bin']
-
-
 def main():
     dt = SNLI_DataLoader()
-    model = MainModel(emb_file, dt.get_text_2_id_vocabulary()).to(device)
+    model = MainModel(dt.get_text_2_id_vocabulary()).to(device)
     opt = Adam(model.parameters(), lr=0.001)
 
     train(model, dt.train_iter, dt.val_iter, opt)
