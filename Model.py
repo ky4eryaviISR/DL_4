@@ -8,8 +8,8 @@ from tqdm import tqdm
 import numpy as np
 from torch import cuda
 
-# device = 'cuda' if cuda.is_available() else 'cpu'
-device = 'cpu'
+device = 'cuda' if cuda.is_available() else 'cpu'
+
 def parse_embedding(path):
     glove_index = {}
     n_lines = sum(1 for _ in open(path, encoding='utf8'))
@@ -27,14 +27,14 @@ class MetaEmbedding(nn.Module):
         super().__init__()
         dim_fasttext = 300
         fasttext = parse_embedding('data/fasttext/wiki-news-300d-1M.vec')
-        fasttext = self.create_embedding(global_dict, fasttext,dim_fasttext)
+        fasttext = self.create_embedding(global_dict, fasttext, dim_fasttext)
 
-        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
+        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=False)
         dim_glove = 50
         glove = parse_embedding('data/glove/glove.6B.50d.txt')
-        glove = self.create_embedding(global_dict, glove,dim_glove)
+        glove = self.create_embedding(global_dict, glove, dim_glove)
         dim_glove = glove.shape[1]
-        self.glove = nn.Embedding.from_pretrained(glove, freeze=True)
+        self.glove = nn.Embedding.from_pretrained(glove, freeze=False)
 
         self.proj_fasttext = nn.Linear(dim_fasttext, 256)
         self.proj_glove = nn.Linear(dim_glove, 256)
@@ -42,7 +42,8 @@ class MetaEmbedding(nn.Module):
         self.fasttext_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
         self.glove_scalar = nn.Parameter(torch.rand(1), requires_grad=True)
 
-    def create_embedding(self, word_dict, embedding_files,dim):
+
+    def create_embedding(self, word_dict, embedding_files, dim):
         embed = torch.zeros(len(word_dict.items()), dim)
         for word, loc in word_dict.items():
             if word in embedding_files.keys():
@@ -54,7 +55,7 @@ class MetaEmbedding(nn.Module):
         glove_out = self.glove_scalar*self.proj_glove(self.glove(word))
         fast_out = self.fasttext_scalar*self.proj_fasttext(self.fasttext(word))
         out = glove_out + fast_out
-        return F.sigmoid(out)
+        return torch.sigmoid(out)
 
 
 class SentenceEncoder(nn.Module):

@@ -6,22 +6,23 @@ from Model import MainModel
 from dataloader import SNLI_DataLoader
 from torch import cuda
 
-# device = 'cuda' if cuda.is_available() else 'cpu'
-device = 'cpu'
+LR = 0.01
+device = 'cuda' if cuda.is_available() else 'cpu'
 def evaluate(model, data_loder, criterion, set_name):
     model.eval()
     test_loss = 0
     correct = 0
+    total = 0
     for data in data_loder:
-        data.label = data.label - 1
         output = model(data.premise, data.hypothesis)
-        test_loss += criterion(output, data.label.view(data.label.shape[1])).item()
+        test_loss += criterion(output, data.label).item()
         pred = output.max(1, keepdim=True)[1]
         correct += pred.eq(data.label.view_as(pred)).sum()
-    test_loss /= len(data.dataset)
-    test_acc = 100. * correct / len(data.dataset)
-    print('{} set: Average loss: {:.4f}, Accuracy: {}/{}({:.0f}%)'.
-          format(set_name, test_loss, correct, len(data.dataset), test_acc))
+        total += pred.shape[0]
+    test_loss /= total
+    test_acc = 100. * correct / total
+    print('{} set: Accuracy: {}/{}({:.0f}%), Average loss: {:.8f}'.
+          format(set_name, correct,  total, test_acc, test_loss))
     return test_acc, test_loss
 
 
@@ -32,13 +33,16 @@ def train(model, tr_data, val_data, opt, epoch=10):
         for data in tqdm(tr_data):
             opt.zero_grad()
             preds = model(data.premise, data.hypothesis)
-            loss = criterion(preds, data.label.view(data.label.shape[1])-1)
+            loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
-            evaluate(model, tr_data, criterion, 'Train')
 
         evaluate(model, val_data, criterion, 'Validation')
 
+def adjust_lr(optimizer, epoch):
+    lr = LR*(1 - epoch/20)**0.9
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 emb_file = ['data/fasttext/wiki-news-300d-1M.vec',
             'data/glove/glove.6B.50d.txt',
@@ -48,7 +52,7 @@ emb_file = ['data/fasttext/wiki-news-300d-1M.vec',
 def main():
     dt = SNLI_DataLoader()
     model = MainModel(emb_file, dt.get_text_2_id_vocabulary()).to(device)
-    opt = Adam(model.parameters(), lr=1e-2)
+    opt = Adam(model.parameters(), lr=0.001)
 
     train(model, dt.train_iter, dt.val_iter, opt)
     print('x')
