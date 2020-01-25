@@ -1,13 +1,14 @@
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
-from torch.functional import F
 from tqdm import tqdm
 from Model import MainModel
 from dataloader import SNLI_DataLoader
 from torch import cuda
 
-LR = 0.01
+LR = 0.0004
 device = 'cuda' if cuda.is_available() else 'cpu'
+
+
 def evaluate(model, data_loder, criterion, set_name):
     model.eval()
     test_loss = 0
@@ -28,26 +29,31 @@ def evaluate(model, data_loder, criterion, set_name):
 
 def train(model, tr_data, val_data, opt, epoch=10):
     criterion = CrossEntropyLoss()
+    evaluate(model, val_data, criterion, 'Validation')
     for i in range(epoch):
         model.train()
-        for data in tqdm(tr_data):
+        for data in tr_data:
             opt.zero_grad()
             preds = model(data.premise, data.hypothesis)
             loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
-
+        adjust_lr(opt, i)
         evaluate(model, val_data, criterion, 'Validation')
+        evaluate(model, tr_data, criterion, 'Train')
+
 
 def adjust_lr(optimizer, epoch):
     lr = LR*(1 - epoch/20)**0.9
+    print(f"New LR:{lr}")
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
 
 def main():
     dt = SNLI_DataLoader()
     model = MainModel(dt.get_text_2_id_vocabulary()).to(device)
-    opt = Adam(model.parameters(), lr=0.001)
+    opt = Adam(model.parameters(), lr=LR)
 
     train(model, dt.train_iter, dt.val_iter, opt)
     print('x')

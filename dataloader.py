@@ -23,9 +23,8 @@ class SNLI_DataLoader(object):
                                      test="snli_1.0_test.jsonl")
 
         self.train_iter, self.val_iter = BucketIterator.splits((trn, vld),
-                                                               batch_sizes=(256, 256),
+                                                               batch_sizes=(64, 64),
                                                                device=device,
-                                                               sort_key=lambda x: (len(x.premise), len(x.hypothesis)),
                                                                sort_within_batch=True,
                                                                repeat=False)
 
