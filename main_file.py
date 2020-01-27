@@ -5,7 +5,7 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE
+from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE, EMB_LEVY
 from dataloader import SNLI_DataLoader
 from torch import cuda
 LR = 0.0004
@@ -25,17 +25,18 @@ def evaluate(model, data_loder, criterion, set_name):
         total += pred.shape[0]
     test_loss /= total
     test_acc = 100. * correct / total
-    print('{} set: Accuracy: {}/{}({:.0f}%), Average loss: {:.8f}'.
+    print('\n{} set: Accuracy: {}/{}({:.2f}%), Average loss: {:.8f}'.
           format(set_name, correct,  total, test_acc, test_loss))
     return test_acc, test_loss
 
 
-def train(model, tr_data, val_data, opt, translator, epoch=10):
+def train(model, tr_data, val_data, opt, epoch=10):
     criterion = CrossEntropyLoss()
-    scheduler = ReduceLROnPlateau(opt, 'max', verbose=True, factor=0.2, min_lr=0.00008,
+    scheduler = ReduceLROnPlateau(opt, 'max', factor=0.2, min_lr=0.00008,
                                   patience=5)
     for i in range(epoch):
         model.train()
+        print('Epoch: ', i)
         for data in tqdm(tr_data, miniters=500):
             opt.zero_grad()
             # print([translator[i] for i in data.premise[0].view(data.premise[0].shape[1], data.premise[0].shape[0])[0]])
@@ -43,9 +44,9 @@ def train(model, tr_data, val_data, opt, translator, epoch=10):
             loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
-        scheduler.step()
+            scheduler.step(loss)
         evaluate(model, val_data, criterion, 'Validation')
-        evaluate(model, tr_data, criterion, 'Train')
+        # evaluate(model, tr_data, criterion, 'Train')
 
 
 def adjust_lr(optimizer, epoch):
@@ -61,7 +62,7 @@ def get_emb_set():
     if os.path.exists(check_cache):
         with open(check_cache, 'rb') as fp:
             return pickle.load(fp)
-    for file_path in [EMB_FASTTEXT, EMB_GLOVE]:
+    for file_path in [EMB_FASTTEXT, EMB_GLOVE, EMB_LEVY]:
         with open(file_path, encoding='utf8') as fp:
             for line in tqdm(fp):
                 if len(line.split()) != 301:
@@ -78,7 +79,7 @@ def main():
     dt = SNLI_DataLoader(emb_set)
     model = MainModel(dt.get_text_2_id_vocabulary()).to(device)
     opt = Adam(model.parameters(), lr=LR)
-    train(model, dt.train_iter, dt.val_iter, opt, dt.get_id_2_text_vocabulary())
+    train(model, dt.train_iter, dt.val_iter, opt)
     print('x')
 
 
