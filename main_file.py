@@ -30,7 +30,7 @@ def evaluate(model, data_loder, criterion, set_name):
     return test_acc, test_loss
 
 
-def train(model, tr_data, val_data, opt, epoch=10):
+def train(model, tr_data, val_data, opt, epoch=30):
     criterion = CrossEntropyLoss()
     scheduler = ReduceLROnPlateau(opt, 'max', factor=0.2, min_lr=0.00008,
                                   patience=5)
@@ -44,13 +44,14 @@ def train(model, tr_data, val_data, opt, epoch=10):
             loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
-            scheduler.step(loss)
+            # scheduler.step(loss)
+        adjust_lr(opt, i+1)
         evaluate(model, val_data, criterion, 'Validation')
         # evaluate(model, tr_data, criterion, 'Train')
 
 
 def adjust_lr(optimizer, epoch):
-    lr = LR*(1 - epoch/20)**0.9
+    lr = LR*(1 - epoch/30)**0.9
     print(f"New LR:{lr}")
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
