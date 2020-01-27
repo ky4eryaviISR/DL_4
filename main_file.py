@@ -1,10 +1,13 @@
+import os
+import pickle
+
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-from Model import MainModel
+from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE
 from dataloader import SNLI_DataLoader
 from torch import cuda
-
 LR = 0.0004
 device = 'cuda' if cuda.is_available() else 'cpu'
 
@@ -27,18 +30,20 @@ def evaluate(model, data_loder, criterion, set_name):
     return test_acc, test_loss
 
 
-def train(model, tr_data, val_data, opt, epoch=10):
+def train(model, tr_data, val_data, opt, translator, epoch=10):
     criterion = CrossEntropyLoss()
-    evaluate(model, val_data, criterion, 'Validation')
+    scheduler = ReduceLROnPlateau(opt, 'max', verbose=True, factor=0.2, min_lr=0.00008,
+                                  patience=5)
     for i in range(epoch):
         model.train()
-        for data in tr_data:
+        for data in tqdm(tr_data, miniters=500):
             opt.zero_grad()
+            # print([translator[i] for i in data.premise[0].view(data.premise[0].shape[1], data.premise[0].shape[0])[0]])
             preds = model(data.premise, data.hypothesis)
             loss = criterion(preds, data.label)
             loss.backward()
             opt.step()
-        adjust_lr(opt, i)
+        scheduler.step()
         evaluate(model, val_data, criterion, 'Validation')
         evaluate(model, tr_data, criterion, 'Train')
 
@@ -50,12 +55,30 @@ def adjust_lr(optimizer, epoch):
         param_group['lr'] = lr
 
 
+def get_emb_set():
+    emb_set = set()
+    check_cache = 'data/vocab'
+    if os.path.exists(check_cache):
+        with open(check_cache, 'rb') as fp:
+            return pickle.load(fp)
+    for file_path in [EMB_FASTTEXT, EMB_GLOVE]:
+        with open(file_path, encoding='utf8') as fp:
+            for line in tqdm(fp):
+                if len(line.split()) != 301:
+                    continue
+                emb_set.add(line.split()[0])
+    with open(check_cache, 'wb') as fp:
+        pickle.dump(emb_set, fp)
+    return emb_set
+
+
 def main():
-    dt = SNLI_DataLoader()
+    emb_set = get_emb_set()
+    print(f"Embedding size: {len(emb_set)}")
+    dt = SNLI_DataLoader(emb_set)
     model = MainModel(dt.get_text_2_id_vocabulary()).to(device)
     opt = Adam(model.parameters(), lr=LR)
-
-    train(model, dt.train_iter, dt.val_iter, opt)
+    train(model, dt.train_iter, dt.val_iter, opt, dt.get_id_2_text_vocabulary())
     print('x')
 
 
