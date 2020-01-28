@@ -57,7 +57,7 @@ def parse_embedding(path, vocab):
 
 def normalize(embedding, norm, miss):
     if len(norm) > 0:
-        embedding[norm, :] = embedding[norm, :] - embedding[norm, :].mean()
+        embedding[norm, :] = embedding[norm, :] - embedding[norm, :].mean(0)
     if len(miss) > 0:
         embedding[miss] = 0
     return embedding
@@ -95,10 +95,10 @@ class MetaEmbedding(nn.Module):
         # self.proj_levy = nn.Linear(dim, emb)
         # nn.init.xavier_normal_(self.proj_levy.weight)
 
-        self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                                nn.Linear(10, 1))
-        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
-                                             nn.Linear(10, 1))
+        self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 1))
+                                                # nn.Linear(10, 1))
+        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 1))
+                                            #  nn.Linear(10, 1))
         # self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
         #                                     nn.Linear(10, 1))
 
@@ -132,7 +132,7 @@ class MetaEmbedding(nn.Module):
         alpha = torch.cat([glove_alpha, fast_alpha], dim=2)
         # alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
         alpha = F.softmax(alpha, dim=2).unsqueeze(3).expand_as(embed)
-        out = embed
+        out = alpha*embed
         out = out.sum(dim=2)
         return F.relu(out)
 
@@ -162,7 +162,7 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=300, out_dim=128):
+    def __init__(self, vocabulary_map, emb_dim=300, out_dim=256):
         super().__init__()
         self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
