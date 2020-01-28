@@ -48,8 +48,9 @@ def train(model, tr_data, val_data, opt, epoch=30):
         # evaluate(model, tr_data, criterion, 'Train')
 
 
+
 def adjust_lr(optimizer, epoch):
-    lr = LR*(1 - epoch/30)**0.9
+    lr = LR*0.9**epoch
     print(f"New LR:{lr}")
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
