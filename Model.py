@@ -13,7 +13,7 @@ device = 'cuda' if cuda.is_available() else 'cpu'
 
 EMB_GLOVE = 'data/glove/glove.840B.300d.txt'
 EMB_FASTTEXT = 'data/fasttext/crawl-300d-2M.vec'
-EMB_LEVY = 'data/levy/bow2.words'
+# EMB_LEVY = 'data/levy/bow2.words'
 
 
 def is_accessible(path):
@@ -63,11 +63,6 @@ def normalize(embedding, norm, miss):
     return embedding
 
 
-def init_weights(m):
-    if type(m) == nn.Linear:
-        nn.init.xavier_uniform(m.weight)
-
-
 class MetaEmbedding(nn.Module):
 
     def __init__(self, global_dict, emb, padding):
@@ -79,7 +74,7 @@ class MetaEmbedding(nn.Module):
         fasttext = parse_embedding(EMB_FASTTEXT, global_dict)
         fasttext, norm, miss = self.create_embedding(global_dict, fasttext, dim)
         fasttext = normalize(fasttext, norm, miss)
-        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
+        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True, padding_idx=padding)
 
         print("Start parsing glove")
         glove = parse_embedding(EMB_GLOVE, global_dict)
@@ -88,28 +83,24 @@ class MetaEmbedding(nn.Module):
         self.glove = nn.Embedding.from_pretrained(glove, freeze=True, padding_idx=padding)
 
         print("Start parsing levy")
-        levy = parse_embedding(EMB_LEVY, global_dict)
-        levy, norm, miss = self.create_embedding(global_dict, levy, dim)
-        levy = normalize(fasttext, norm, miss)
-        self.levy = nn.Embedding.from_pretrained(levy, freeze=True)
+        # levy = parse_embedding(EMB_LEVY, global_dict)
+        # levy, norm, miss = self.create_embedding(global_dict, levy, dim)
+        # levy = normalize(fasttext, norm, miss)
+        # self.levy = nn.Embedding.from_pretrained(levy, freeze=True, padding_idx=padding)
 
         self.proj_fasttext = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_fasttext.weight)
         self.proj_glove = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_glove.weight)
-        self.proj_levy = nn.Linear(dim, emb)
-        nn.init.xavier_normal_(self.proj_levy.weight)
+        # self.proj_levy = nn.Linear(dim, emb)
+        # nn.init.xavier_normal_(self.proj_levy.weight)
 
         self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
                                                 nn.Linear(10, 1))
         self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
                                              nn.Linear(10, 1))
-        self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                            nn.Linear(10, 1))
-        self.levy_get_alpha.apply(init_weights)
-        self.glove_get_aplha.apply(init_weights)
-        self.fasttext_get_alpha.apply(init_weights)
-
+        # self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
+        #                                     nn.Linear(10, 1))
 
     def create_embedding(self, word_dict, embedding_files, dim):
         to_norm = []
@@ -129,19 +120,21 @@ class MetaEmbedding(nn.Module):
         glove_out = self.proj_glove(glove_emb)
         fast_emb = self.fasttext(word)
         fast_out = self.proj_fasttext(fast_emb)
-        levy_emb = self.levy(word)
-        levy_out = self.proj_levy(levy_emb)
+        # levy_emb = self.levy(word)
+        # levy_out = self.proj_levy(levy_emb)
 
         glove_alpha = self.glove_get_aplha(glove_emb)
         fast_alpha = self.fasttext_get_alpha(fast_emb)
-        levy_alpha = self.levy_get_alpha(levy_emb)
+        # levy_alpha = self.levy_get_alpha(levy_emb)
 
-        embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
-        alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
+        embed = torch.stack([glove_out, fast_out], dim=2)
+        # embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
+        alpha = torch.cat([glove_alpha, fast_alpha], dim=2)
+        # alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
         alpha = F.softmax(alpha, dim=2).unsqueeze(3).expand_as(embed)
-        out = alpha*embed
+        out = embed
         out = out.sum(dim=2)
-        return out
+        return F.relu(out)
 
 
 class SentenceEncoder(nn.Module):

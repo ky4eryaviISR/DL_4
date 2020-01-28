@@ -5,10 +5,11 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE, EMB_LEVY
+from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE
 from dataloader import SNLI_DataLoader
-from torch import cuda
-LR = 0.0004
+from torch import cuda, nn
+
+LR = 0.0007
 device = 'cuda' if cuda.is_available() else 'cpu'
 
 
@@ -32,19 +33,16 @@ def evaluate(model, data_loder, criterion, set_name):
 
 def train(model, tr_data, val_data, opt, epoch=30):
     criterion = CrossEntropyLoss()
-    scheduler = ReduceLROnPlateau(opt, 'max', factor=0.2, min_lr=0.00008,
-                                  patience=5)
     for i in range(epoch):
         model.train()
         print('Epoch: ', i)
         for data in tqdm(tr_data, miniters=500):
             opt.zero_grad()
-            # print([translator[i] for i in data.premise[0].view(data.premise[0].shape[1], data.premise[0].shape[0])[0]])
             preds = model(data.premise, data.hypothesis)
             loss = criterion(preds, data.label)
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 5)
             opt.step()
-            # scheduler.step(loss)
         adjust_lr(opt, i+1)
         evaluate(model, val_data, criterion, 'Validation')
         # evaluate(model, tr_data, criterion, 'Train')
@@ -63,7 +61,7 @@ def get_emb_set():
     if os.path.exists(check_cache):
         with open(check_cache, 'rb') as fp:
             return pickle.load(fp)
-    for file_path in [EMB_FASTTEXT, EMB_GLOVE, EMB_LEVY]:
+    for file_path in [EMB_FASTTEXT, EMB_GLOVE]:
         with open(file_path, encoding='utf8') as fp:
             for line in tqdm(fp):
                 if len(line.split()) != 301:
