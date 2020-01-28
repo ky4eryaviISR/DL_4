@@ -13,7 +13,7 @@ device = 'cuda' if cuda.is_available() else 'cpu'
 
 EMB_GLOVE = 'data/glove/glove.840B.300d.txt'
 EMB_FASTTEXT = 'data/fasttext/crawl-300d-2M.vec'
-EMB_LEVY = 'data/levy/bow2.words'
+# EMB_LEVY = 'data/levy/bow2.words'
 
 
 def is_accessible(path):
@@ -57,13 +57,15 @@ def parse_embedding(path, vocab):
 
 def normalize(embedding, norm, miss):
     if len(norm) > 0:
-        embedding[norm,:] = embedding[norm, :] - embedding[norm, :].mean()
+        embedding[norm, :] = embedding[norm, :] - embedding[norm, :].mean(0)
     if len(miss) > 0:
         embedding[miss] = 0
     return embedding
 
+
 class MetaEmbedding(nn.Module):
-    def __init__(self, global_dict):
+
+    def __init__(self, global_dict, emb, padding):
         super().__init__()
 
         dim = 300
@@ -72,41 +74,38 @@ class MetaEmbedding(nn.Module):
         fasttext = parse_embedding(EMB_FASTTEXT, global_dict)
         fasttext, norm, miss = self.create_embedding(global_dict, fasttext, dim)
         fasttext = normalize(fasttext, norm, miss)
-        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True)
+        self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True, padding_idx=padding)
 
         print("Start parsing glove")
         glove = parse_embedding(EMB_GLOVE, global_dict)
         glove, norm, miss = self.create_embedding(global_dict, glove, dim)
         glove = normalize(fasttext, norm, miss)
-        self.glove = nn.Embedding.from_pretrained(glove, freeze=True)
+        self.glove = nn.Embedding.from_pretrained(glove, freeze=True, padding_idx=padding)
 
         print("Start parsing levy")
-        levy = parse_embedding(EMB_LEVY, global_dict)
-        levy, norm, miss = self.create_embedding(global_dict, levy, dim)
-        levy = normalize(fasttext, norm, miss)
-        self.levy = nn.Embedding.from_pretrained(levy, freeze=True)
+        # levy = parse_embedding(EMB_LEVY, global_dict)
+        # levy, norm, miss = self.create_embedding(global_dict, levy, dim)
+        # levy = normalize(fasttext, norm, miss)
+        # self.levy = nn.Embedding.from_pretrained(levy, freeze=True, padding_idx=padding)
 
-        self.proj_fasttext = nn.Linear(dim, 256)
+        self.proj_fasttext = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_fasttext.weight)
-        self.proj_glove = nn.Linear(dim, 256)
+        self.proj_glove = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_glove.weight)
-        self.proj_levy = nn.Linear(dim, 256)
-        nn.init.xavier_normal_(self.proj_levy.weight)
+        # self.proj_levy = nn.Linear(dim, emb)
+        # nn.init.xavier_normal_(self.proj_levy.weight)
 
-        self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                                nn.ReLU(),
-                                                nn.Linear(10, 1))
-        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
-                                             nn.ReLU(),
-                                             nn.Linear(10, 1))
-        self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                            nn.ReLU(),
-                                            nn.Linear(10, 1))
+        self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 1))
+                                                # nn.Linear(10, 1))
+        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 1))
+                                            #  nn.Linear(10, 1))
+        # self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
+        #                                     nn.Linear(10, 1))
 
     def create_embedding(self, word_dict, embedding_files, dim):
         to_norm = []
         miss = []
-        embed = torch.FloatTensor(len(word_dict.items()), dim).uniform_(-1, 1)
+        embed = torch.FloatTensor(len(word_dict.items()), dim).zero_()
         for word, loc in tqdm(word_dict.items()):
             if word in embedding_files.keys():
                 vector = torch.from_numpy(embedding_files[word])
@@ -121,19 +120,21 @@ class MetaEmbedding(nn.Module):
         glove_out = self.proj_glove(glove_emb)
         fast_emb = self.fasttext(word)
         fast_out = self.proj_fasttext(fast_emb)
-        levy_emb = self.levy(word)
-        levy_out = self.proj_levy(levy_emb)
+        # levy_emb = self.levy(word)
+        # levy_out = self.proj_levy(levy_emb)
 
         glove_alpha = self.glove_get_aplha(glove_emb)
         fast_alpha = self.fasttext_get_alpha(fast_emb)
-        levy_alpha = self.levy_get_alpha(levy_emb)
+        # levy_alpha = self.levy_get_alpha(levy_emb)
 
-        embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
-        alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
+        embed = torch.stack([glove_out, fast_out], dim=2)
+        # embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
+        alpha = torch.cat([glove_alpha, fast_alpha], dim=2)
+        # alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
         alpha = F.softmax(alpha, dim=2).unsqueeze(3).expand_as(embed)
         out = alpha*embed
         out = out.sum(dim=2)
-        return out
+        return F.relu(out)
 
 
 class SentenceEncoder(nn.Module):
@@ -161,9 +162,9 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=256, out_dim=256):
+    def __init__(self, vocabulary_map, emb_dim=300, out_dim=256):
         super().__init__()
-        self.dme = MetaEmbedding(vocabulary_map).to(device)
+        self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         self.classifier = nn.Sequential(
             nn.ReLU(),

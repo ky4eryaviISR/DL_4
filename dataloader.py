@@ -1,10 +1,9 @@
 import json
 import os
-import pickle
 
 import spacy
 import torch
-from torchtext.data import Field, BucketIterator, Iterator, TabularDataset
+from torchtext.data import Field, BucketIterator, Iterator
 from torchtext.datasets import SNLI
 from torch import cuda
 from tqdm import tqdm
