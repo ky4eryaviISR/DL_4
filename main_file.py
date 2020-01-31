@@ -3,12 +3,10 @@ import pickle
 
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE
 from dataloader import SNLI_DataLoader
 from torch import cuda, nn
-
 LR = 0.0007
 device = 'cuda' if cuda.is_available() else 'cpu'
 
@@ -31,25 +29,26 @@ def evaluate(model, data_loder, criterion, set_name):
     return test_acc, test_loss
 
 
-def train(model, tr_data, val_data, opt, epoch=30):
+def train(model, tr_data, val_data,test_data, opt, epoch=30):
     criterion = CrossEntropyLoss()
     for i in range(epoch):
         model.train()
         print('Epoch: ', i)
-        for data in tqdm(tr_data, miniters=500):
+        for data in tqdm(tr_data, position=0,leave=True):
             opt.zero_grad()
             preds = model(data.premise, data.hypothesis)
             loss = criterion(preds, data.label)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 5)
             opt.step()
-        adjust_lr(opt, i+1)
+        evaluate(model, tr_data, criterion, 'Train')
         evaluate(model, val_data, criterion, 'Validation')
-        # evaluate(model, tr_data, criterion, 'Train')
+        evaluate(model, test_data, criterion, 'Test')
+        adjust_lr(opt, i+1)
 
 
 def adjust_lr(optimizer, epoch):
-    lr = LR*(1 - epoch/30)**0.9
+    lr = LR*0.9**epoch
     print(f"New LR:{lr}")
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -61,7 +60,7 @@ def get_emb_set():
     if os.path.exists(check_cache):
         with open(check_cache, 'rb') as fp:
             return pickle.load(fp)
-    for file_path in [EMB_FASTTEXT, EMB_GLOVE]:
+    for file_path in [EMB_FASTTEXT]:
         with open(file_path, encoding='utf8') as fp:
             for line in tqdm(fp):
                 if len(line.split()) != 301:
@@ -78,7 +77,7 @@ def main():
     dt = SNLI_DataLoader(emb_set)
     model = MainModel(dt.get_text_2_id_vocabulary()).to(device)
     opt = Adam(model.parameters(), lr=LR)
-    train(model, dt.train_iter, dt.val_iter, opt)
+    train(model, dt.train_iter, dt.val_iter,dt.test_iter, opt)
     print('x')
 
 

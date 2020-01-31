@@ -85,15 +85,11 @@ class MetaEmbedding(nn.Module):
         nn.init.xavier_normal_(self.proj_fasttext.weight)
         self.proj_glove = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_glove.weight)
-        # self.proj_levy = nn.Linear(dim, emb)
-        # nn.init.xavier_normal_(self.proj_levy.weight)
 
         self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                                nn.Linear(10, 10))
-        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 1),
+                                                nn.Linear(10, 1))
+        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
                                              nn.Linear(10, 1))
-        # self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-        #                                     nn.Linear(10, 1))
 
     def create_embedding(self, word_dict, embedding_files, dim, path):
         to_norm = []
@@ -126,17 +122,9 @@ class MetaEmbedding(nn.Module):
         glove_out = self.proj_glove(glove_emb)
         fast_emb = self.fasttext(word)
         fast_out = self.proj_fasttext(fast_emb)
-        # levy_emb = self.levy(word)
-        # levy_out = self.proj_levy(levy_emb)
-
-        # glove_alpha = self.glove_get_aplha(glove_emb)
-        # fast_alpha = self.fasttext_get_alpha(fast_emb)
-        # levy_alpha = self.levy_get_alpha(levy_emb)
 
         embed = torch.stack([glove_out, fast_out], dim=2)
-        # embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
         alpha = self.fasttext_get_alpha(embed)
-        # alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
         alpha = F.softmax(alpha, dim=2).expand_as(embed)
         out = alpha*embed
         out = out.sum(dim=2)
@@ -170,7 +158,7 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=300, out_dim=128):
+    def __init__(self, vocabulary_map, emb_dim=300, out_dim=256):
         super().__init__()
         self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
