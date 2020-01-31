@@ -5,11 +5,13 @@ if not os.path.exists('data/glove'):
               f'unzip glove.6B.zip && '
               f'mkdir data/glove && '
               f'mv glove*.txt data/glove')
+
 if not os.path.exists('data/fasttext'):
-  os.system(f'wget https://dl.fbaipublicfiles.com/fasttext/vectors-english/wiki-news-300d-1M.vec.zip &&'
-            f'unzip wiki-news-300d-1M.vec.zip && '
+  os.system(f'wget https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip &&'
+            f'unzip crawl-300d-2M.vec.zip && '
             f'mkdir data/fasttext && '
-            f'mv data/wiki-news-300d-1M.vec data/fasttext')
+            f'mv data/crawl-300d-2M.vec data/fasttext')
+
 if not os.path.exists('data/word2vec'):
   os.system(f'wget https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz && '
             f'gunzip GoogleNews-vectors-negative300.bin.gz && '
