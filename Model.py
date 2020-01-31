@@ -1,5 +1,7 @@
 import os
+import pickle
 
+import joblib
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
@@ -15,7 +17,6 @@ EMB_GLOVE = 'data/glove/glove.840B.300d.txt'
 EMB_FASTTEXT = 'data/fasttext/crawl-300d-2M.vec'
 # EMB_LEVY = 'data/levy/bow2.words'
 
-
 def is_accessible(path):
     """
     Check if the file or directory at `path` can
@@ -25,13 +26,13 @@ def is_accessible(path):
         p = Path(path)
         new_name = ''.join([p.stem, '_minimize.npy'])
         input_f = Path(p.parent, f"{new_name}").as_posix()
-        my_dict_back = {line.split()[0]: np.array([float(i) for i in line.split()[1:]]) for line in open(input_f)}
+        my_dict_back = joblib.load(open(input_f, 'rb'))
     except IOError:
         return None
     return my_dict_back
 
 
-def parse_embedding(path, vocab):
+def parse_embedding(path):
     glove_index = is_accessible(path)
     if not glove_index:
         glove_index = {}
@@ -40,24 +41,16 @@ def parse_embedding(path, vocab):
             for line in tqdm(fp, total=n_lines):
                 split = line.split()
                 word = split[0]
-                if len(split[1:]) != 300 or (word not in vocab and word.lower() not in vocab):
+                if len(split[1:]) != 300:
                     continue
                 vec = np.array(split[1:], dtype='float32')
-                vector = vec
-                glove_index[word] = vector
-        p = Path(path)
-        new_name = ''.join([p.stem, '_minimize.npy'])
-        outfile = Path(p.parent, f"{new_name}").as_posix()
-        if not os.path.exists(outfile):
-            with open(outfile, 'w') as fp:
-                fp.writelines('\n'.join([k+' ' + ' '.join([str(i) for i in v])
-                                        for k, v in glove_index.items()]))
+                glove_index[word] = torch.tensor(vec)
     return glove_index
 
 
 def normalize(embedding, norm, miss):
     if len(norm) > 0:
-        embedding[norm, :] = embedding[norm, :] - embedding[norm, :].mean()
+        embedding[norm, :] = embedding[norm, :] - embedding[norm, :].mean(0)
     if len(miss) > 0:
         embedding[miss] = 0
     return embedding
@@ -71,14 +64,14 @@ class MetaEmbedding(nn.Module):
         dim = 300
 
         print("Start parsing fasttext")
-        fasttext = parse_embedding(EMB_FASTTEXT, global_dict)
-        fasttext, norm, miss = self.create_embedding(global_dict, fasttext, dim)
+        fasttext = parse_embedding(EMB_FASTTEXT)
+        fasttext, norm, miss = self.create_embedding(global_dict, fasttext, dim, EMB_FASTTEXT)
         fasttext = normalize(fasttext, norm, miss)
         self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True, padding_idx=padding)
 
         print("Start parsing glove")
-        glove = parse_embedding(EMB_GLOVE, global_dict)
-        glove, norm, miss = self.create_embedding(global_dict, glove, dim)
+        glove = parse_embedding(EMB_GLOVE)
+        glove, norm, miss = self.create_embedding(global_dict, glove, dim, EMB_GLOVE)
         glove = normalize(fasttext, norm, miss)
         self.glove = nn.Embedding.from_pretrained(glove, freeze=True, padding_idx=padding)
 
@@ -96,23 +89,36 @@ class MetaEmbedding(nn.Module):
         # nn.init.xavier_normal_(self.proj_levy.weight)
 
         self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
-                                                nn.Linear(10, 1))
-        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
+                                                nn.Linear(10, 10))
+        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 1),
                                              nn.Linear(10, 1))
         # self.levy_get_alpha = nn.Sequential(nn.Linear(dim, 10),
         #                                     nn.Linear(10, 1))
 
-    def create_embedding(self, word_dict, embedding_files, dim):
+    def create_embedding(self, word_dict, embedding_files, dim, path):
         to_norm = []
         miss = []
+        emb_store = {}
         embed = torch.FloatTensor(len(word_dict.items()), dim).zero_()
         for word, loc in tqdm(word_dict.items()):
             if word in embedding_files.keys():
-                vector = torch.from_numpy(embedding_files[word])
-                embed[loc-1, :] = vector[:]
+                embed[loc-1, :] = embedding_files[word]
                 to_norm.append(loc-1)
+                emb_store[word] = embedding_files[word]
+
+            elif word.lower() in embedding_files.keys():
+                embed[loc - 1, :] = embedding_files[word.lower()]
+                to_norm.append(loc - 1)
+                emb_store[word.lower()] = embedding_files[word.lower()]
+
             else:
+                print(word)
                 miss.append(loc-1)
+        p = Path(path)
+        new_name = ''.join([p.stem, '_minimize.npy'])
+        outfile = Path(p.parent, f"{new_name}").as_posix()
+        if not os.path.exists(outfile):
+            pickle.dump(emb_store, open(outfile, 'wb'))
         return embed, to_norm, miss
 
     def forward(self, word):
@@ -123,16 +129,16 @@ class MetaEmbedding(nn.Module):
         # levy_emb = self.levy(word)
         # levy_out = self.proj_levy(levy_emb)
 
-        glove_alpha = self.glove_get_aplha(glove_emb)
-        fast_alpha = self.fasttext_get_alpha(fast_emb)
+        # glove_alpha = self.glove_get_aplha(glove_emb)
+        # fast_alpha = self.fasttext_get_alpha(fast_emb)
         # levy_alpha = self.levy_get_alpha(levy_emb)
 
         embed = torch.stack([glove_out, fast_out], dim=2)
         # embed = torch.stack([glove_out, fast_out, levy_out], dim=2)
-        alpha = torch.cat([glove_alpha, fast_alpha], dim=2)
+        alpha = self.fasttext_get_alpha(embed)
         # alpha = torch.cat([glove_alpha, fast_alpha, levy_alpha], dim=2)
-        alpha = F.softmax(alpha, dim=2).unsqueeze(3).expand_as(embed)
-        out = embed
+        alpha = F.softmax(alpha, dim=2).expand_as(embed)
+        out = alpha*embed
         out = out.sum(dim=2)
         return F.relu(out)
 
@@ -142,6 +148,8 @@ class SentenceEncoder(nn.Module):
         super().__init__()
         self.out_dim = out_dim
         self.bilstm = nn.LSTM(embedding_dim, out_dim, bidirectional=True, num_layers=1)
+        nn.init.orthogonal_(self.bilstm.weight_hh_l0)
+        nn.init.orthogonal_(self.bilstm.weight_ih_l0)
 
     def init_hidden(self, batch_size=1):
         return (torch.randn(2, batch_size, self.out_dim).to(device),
@@ -169,10 +177,10 @@ class MainModel(nn.Module):
         self.classifier = nn.Sequential(
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(out_dim*4*2, 1024),
+            nn.Linear(out_dim*4*2, 128),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(1024, 3),
+            nn.Linear(128, 3),
         )
 
     def forward(self, prec, hyp):
