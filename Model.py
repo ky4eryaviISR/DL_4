@@ -163,9 +163,10 @@ class MainModel(nn.Module):
         self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         self.classifier = nn.Sequential(
+            nn.Linear(out_dim * 4 * 2, 128),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(out_dim*4*2, 128),
+            nn.Linear(128, 128),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 3),
