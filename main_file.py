@@ -75,6 +75,10 @@ def train(model, tr_data, val_data,test_data, opt, epoch=10):
     evaluate(model, test_data, criterion, 'Test')
     save_graph(acc_list['Train'], acc_list['Validation'], 'Accuracy')
     save_graph(loss_list['Train'], loss_list['Validation'], 'Loss')
+    with open('/content/drive/My Drive/DL_4/data/acc_val','wb') as fp:
+      fp.write(' '.join([str(i) for i in acc_list['Validation']]))
+    with open('/content/drive/My Drive/DL_4/data/loss_val','wb') as fp:
+      fp.write(' '.join([str(i) for i in loss_list['Validation']]))
 
 
 def get_emb_set():
