@@ -105,11 +105,11 @@ class MetaEmbedding(nn.Module):
 
             else:
                 miss.append(loc)
-        emb_store['<unk>'] = embed.mean(0)
-        if word_dict['<unk>'] in miss:
-            emb_store['<unk>'] = embed.mean(0)
-            miss.pop(miss.index(word_dict['<unk>']))
-            to_norm.append(word_dict['<unk>'])
+        # emb_store['<unk>'] = embed.mean(0)
+        # if word_dict['<unk>'] in miss:
+        #     emb_store['<unk>'] = embed.mean(0)
+        #     miss.pop(miss.index(word_dict['<unk>']))
+        #     to_norm.append(word_dict['<unk>'])
         p = Path(path)
         new_name = ''.join([p.stem, '_minimize.npy'])
         outfile = Path(p.parent, f"{new_name}").as_posix()

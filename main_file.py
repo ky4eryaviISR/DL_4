@@ -8,8 +8,29 @@ from tqdm import tqdm
 from Model import MainModel, EMB_FASTTEXT, EMB_GLOVE
 from dataloader import SNLI_DataLoader
 from torch import cuda, nn
+import matplotlib.pyplot as plt
 LR = 0.0007
 device = 'cuda' if cuda.is_available() else 'cpu'
+
+
+def save_graph(train, test, y_axis, title=None):
+    """
+    saving the graph for accuracy/loss
+    :param train: list
+    :param test: list
+    :param y_axis: accuracy/ loss
+    :param title: title of the graph
+    :return:
+    """
+    plt.suptitle(y_axis, fontsize=20)
+    plt.figure()
+    plt.plot(train, color='r', label='train')
+    plt.plot(test, color='g', label='validation')
+    plt.xlabel('Epochs')
+    plt.legend(loc="upper left")
+    plt.ylabel(y_axis)
+    plt.title(y_axis if not title else title)
+    plt.savefig(y_axis+'.png')
 
 
 def evaluate(model, data_loder, criterion, set_name):
@@ -31,8 +52,10 @@ def evaluate(model, data_loder, criterion, set_name):
     return test_acc, test_loss
 
 
-def train(model, tr_data, val_data,test_data, opt, epoch=30):
+def train(model, tr_data, val_data,test_data, opt, epoch=10):
     criterion = CrossEntropyLoss()
+    loss_list = {'Train': [], 'Validation': []}
+    acc_list = {'Train': [], 'Validation': []}
     for i in range(epoch):
         model.train()
         print('Epoch: ', i)
@@ -43,17 +66,15 @@ def train(model, tr_data, val_data,test_data, opt, epoch=30):
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 5)
             opt.step()
-        # evaluate(model, tr_data, criterion, 'Train')
-        evaluate(model, val_data, criterion, 'Validation')
-        evaluate(model, test_data, criterion, 'Test')
-        # adjust_lr(opt, i+1)
-
-
-def adjust_lr(optimizer, epoch):
-    lr = LR*0.9**epoch
-    print(f"New LR:{lr}")
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        acc, lss = evaluate(model, tr_data, criterion, "Train")
+        acc_list['Train'].append(acc)
+        loss_list['Train'].append(lss)
+        acc, lss = evaluate(model, val_data, criterion, "Validation")
+        acc_list['Validation'].append(acc)
+        loss_list['Validation'].append(lss)
+    evaluate(model, test_data, criterion, 'Test')
+    save_graph(acc_list['Train'], acc_list['Validation'], 'Accuracy')
+    save_graph(loss_list['Train'], loss_list['Validation'], 'Loss')
 
 
 def get_emb_set():
