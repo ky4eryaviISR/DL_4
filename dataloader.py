@@ -63,7 +63,7 @@ class SNLI_DataLoader(object):
                     sentence2_spacy = ' '.join([t.text for t in spacy_nlp(sentence2)])
                     f_w.write(str({'sentence1': sentence1_spacy,
                                    'sentence2': sentence2_spacy,
-                                   'gold_label': line['gold_label']}))
+                                   'gold_label': line['gold_label']}).replace('\'', '"'))
 
     def load_datasets(self):
         trn, vld, test = SNLI.splits(self.TEXT, self.LABEL, root='data',

@@ -1,6 +1,7 @@
 import os
 import pickle
 
+import torch
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from tqdm import tqdm
@@ -16,12 +17,13 @@ def evaluate(model, data_loder, criterion, set_name):
     test_loss = 0
     correct = 0
     total = 0
-    for data in data_loder:
-        output = model(data.premise, data.hypothesis)
-        test_loss += criterion(output, data.label).item()
-        pred = output.max(1, keepdim=True)[1]
-        correct += pred.eq(data.label.view_as(pred)).sum()
-        total += pred.shape[0]
+    with torch.no_grad():
+        for data in data_loder:
+            output = model(data.premise, data.hypothesis)
+            test_loss += criterion(output, data.label).item()
+            pred = output.max(1, keepdim=True)[1]
+            correct += pred.eq(data.label.view_as(pred)).sum()
+            total += pred.shape[0]
     test_loss /= total
     test_acc = 100. * correct / total
     print('\n{} set: Accuracy: {}/{}({:.2f}%), Average loss: {:.8f}'.
@@ -41,10 +43,10 @@ def train(model, tr_data, val_data,test_data, opt, epoch=30):
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 5)
             opt.step()
-        evaluate(model, tr_data, criterion, 'Train')
+        # evaluate(model, tr_data, criterion, 'Train')
         evaluate(model, val_data, criterion, 'Validation')
         evaluate(model, test_data, criterion, 'Test')
-        adjust_lr(opt, i+1)
+        # adjust_lr(opt, i+1)
 
 
 def adjust_lr(optimizer, epoch):

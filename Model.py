@@ -64,6 +64,7 @@ class MetaEmbedding(nn.Module):
         print("Start parsing fasttext")
         fasttext = parse_embedding(EMB_FASTTEXT)
         fasttext, norm, miss = self.create_embedding(global_dict, fasttext, dim, EMB_FASTTEXT)
+
         fasttext = normalize(fasttext, norm, miss)
         self.fasttext = nn.Embedding.from_pretrained(fasttext, freeze=True, padding_idx=padding)
 
@@ -80,9 +81,7 @@ class MetaEmbedding(nn.Module):
         # self.levy = nn.Embedding.from_pretrained(levy, freeze=True, padding_idx=padding)
 
         self.proj_fasttext = nn.Linear(dim, emb)
-        nn.init.xavier_normal_(self.proj_fasttext.weight)
         self.proj_glove = nn.Linear(dim, emb)
-        nn.init.xavier_normal_(self.proj_glove.weight)
 
         self.fasttext_get_alpha = nn.Sequential(nn.Linear(emb, 10),
                                                 nn.Linear(10, 1))
@@ -96,17 +95,19 @@ class MetaEmbedding(nn.Module):
         embed = torch.FloatTensor(len(word_dict.items()), dim).zero_()
         for word, loc in tqdm(word_dict.items()):
             if word in embedding_files.keys():
-                embed[loc-1, :] = embedding_files[word]
-                to_norm.append(loc-1)
+                embed[loc, :] = embedding_files[word]
+                to_norm.append(loc)
                 emb_store[word] = embedding_files[word]
-
             elif word.lower() in embedding_files.keys():
-                embed[loc - 1, :] = embedding_files[word.lower()]
-                to_norm.append(loc - 1)
+                embed[loc, :] = embedding_files[word.lower()]
+                to_norm.append(loc)
                 emb_store[word.lower()] = embedding_files[word.lower()]
 
             else:
-                miss.append(loc-1)
+                miss.append(loc)
+        emb_store['<unk>'] = embed.mean(0)
+        miss.pop(miss.index(word_dict['<unk>']))
+        to_norm.append(word_dict['<unk>'])
         p = Path(path)
         new_name = ''.join([p.stem, '_minimize.npy'])
         outfile = Path(p.parent, f"{new_name}").as_posix()
@@ -133,8 +134,6 @@ class SentenceEncoder(nn.Module):
         super().__init__()
         self.out_dim = out_dim
         self.bilstm = nn.LSTM(embedding_dim, out_dim, bidirectional=True, num_layers=1)
-        nn.init.orthogonal_(self.bilstm.weight_hh_l0)
-        nn.init.orthogonal_(self.bilstm.weight_ih_l0)
 
     def init_hidden(self, batch_size=1):
         return (torch.randn(2, batch_size, self.out_dim).to(device),
@@ -155,19 +154,22 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=256, out_dim=256):
+    def __init__(self, vocabulary_map, emb_dim=300, out_dim=256):
         super().__init__()
         self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         #MLP
         self.classifier = nn.Sequential(
             nn.Linear(out_dim * 4 * 2, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(512, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 3),
