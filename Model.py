@@ -17,6 +17,8 @@ EMB_GLOVE = 'data/glove/glove.840B.300d.txt'
 EMB_FASTTEXT = 'data/fasttext/crawl-300d-2M.vec'
 # EMB_LEVY = 'data/levy/bow2.words'
 
+
+
 def is_accessible(path):
     """
     Check if the file or directory at `path` can
@@ -86,9 +88,9 @@ class MetaEmbedding(nn.Module):
         self.proj_glove = nn.Linear(dim, emb)
         nn.init.xavier_normal_(self.proj_glove.weight)
 
-        self.fasttext_get_alpha = nn.Sequential(nn.Linear(dim, 10),
+        self.fasttext_get_alpha = nn.Sequential(nn.Linear(emb, 10),
                                                 nn.Linear(10, 1))
-        self.glove_get_aplha = nn.Sequential(nn.Linear(dim, 10),
+        self.glove_get_aplha = nn.Sequential(nn.Linear(emb, 10),
                                              nn.Linear(10, 1))
 
     def create_embedding(self, word_dict, embedding_files, dim, path):
@@ -108,7 +110,6 @@ class MetaEmbedding(nn.Module):
                 emb_store[word.lower()] = embedding_files[word.lower()]
 
             else:
-                print(word)
                 miss.append(loc-1)
         p = Path(path)
         new_name = ''.join([p.stem, '_minimize.npy'])
@@ -126,7 +127,7 @@ class MetaEmbedding(nn.Module):
         embed = torch.stack([glove_out, fast_out], dim=2)
         alpha = self.fasttext_get_alpha(embed)
         alpha = F.softmax(alpha, dim=2).expand_as(embed)
-        out = alpha*embed
+        out = embed
         out = out.sum(dim=2)
         return F.relu(out)
 
@@ -158,13 +159,16 @@ class SentenceEncoder(nn.Module):
 
 class MainModel(nn.Module):
 
-    def __init__(self, vocabulary_map, emb_dim=300, out_dim=256):
+    def __init__(self, vocabulary_map, emb_dim=256, out_dim=256):
         super().__init__()
         self.dme = MetaEmbedding(vocabulary_map, emb_dim, vocabulary_map['<pad>']).to(device)
         self.sen_encoder = SentenceEncoder(emb_dim, out_dim).to(device)
         #MLP
         self.classifier = nn.Sequential(
-            nn.Linear(out_dim * 4 * 2, 128),
+            nn.Linear(out_dim * 4 * 2, 512),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 128),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 128),
