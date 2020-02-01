@@ -131,3 +131,10 @@ data/
 .idea/
 snli_1.0/
 ex4_d_venv/
+.ipynb_checkpoints
+test dictionaries.ipynb
+.Report.docx
+deep_exe_env
+snli_1.0_dev.tokenized.jsonl
+snli_1.0_test.tokenized.jsonl
+snli_1.0_train.tokenized.jsonl
