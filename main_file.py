@@ -55,7 +55,7 @@ def evaluate(model, data_loder, criterion, set_name):
 def train(model, tr_data, val_data,test_data, opt, epoch=10):
     criterion = CrossEntropyLoss()
     loss_list = {'Train': [], 'Validation': []}
-    acc_list = {'Train': [], 'Validation': []}
+    acc_list = {'Train': [0], 'Validation': [0]}
     for i in range(epoch):
         model.train()
         print('Epoch: ', i)
